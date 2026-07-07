@@ -6,8 +6,8 @@ Sistem monitoring & kontrol ruangan berbasis IoT menggunakan **ESP32-C3 Mini**, 
 
 - 🌡️ Monitoring suhu & kelembaban real-time (DHT22)
 - 🔌 Kontrol relay ON/OFF dari aplikasi Blynk (jarak jauh)
-- � Kontrol relay manual via 2 push button (PB1 = ON, PB2 = OFF)
-- �📟 Tampilan suhu, kelembaban, status relay, dan status WiFi di layar OLED
+- 🔘 Kontrol relay manual via 2 push button (PB1 = ON, PB2 = OFF)
+- 📟 Tampilan suhu, kelembaban, dan status relay di layar OLED
 - ☁️ Sinkronisasi data ke dashboard Blynk (grafik & histori otomatis tersedia di Blynk)
 - 🔄 Auto-sync status relay saat board reconnect ke Blynk (state tidak hilang)
 
@@ -106,5 +106,5 @@ char pass[] = "PASSWORD_WIFI_ANDA";
 2. Pilih **Board**: ESP32C3 Dev Module, **Port** sesuai COM/tty yang muncul.
 3. Klik **Upload**.
 4. Buka **Serial Monitor** (baud rate `115200`) untuk melihat log koneksi WiFi/Blynk dan pembacaan sensor.
-5. OLED akan menampilkan status WiFi, suhu, kelembaban, dan status relay secara berkala (update setiap 2 detik).
+5. OLED akan menampilkan suhu, kelembaban, dan status relay secara berkala (update setiap 5 detik).
 6. Jika tombol manual dipakai, PB1 akan mengaktifkan relay dan PB2 akan mematikannya, tanpa mengganggu kontrol dari aplikasi Blynk.

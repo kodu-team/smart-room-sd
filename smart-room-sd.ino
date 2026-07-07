@@ -170,6 +170,10 @@ void setup() {
   // Initialize serial communication
   Serial.begin(115200);
 
+  // Push Button Setup
+  pinMode(PB1_PIN, INPUT_PULLUP);
+  pinMode(PB2_PIN, INPUT_PULLUP);
+
   // Relay Setup
   pinMode(RELAY_PIN, OUTPUT);
 
@@ -190,6 +194,9 @@ void setup() {
   // Blynk Setup
   Blynk.begin(BLYNK_AUTH_TOKEN, ssid, pass);
   timer.setInterval(SEND_INTERVAL, monitoring);
+
+  // Initial OLED Update
+  updateOLED();
 }
 
 void loop() {
