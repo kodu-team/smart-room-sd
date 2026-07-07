@@ -1,102 +1,70 @@
-/*
-  =====================================================================
-   SMART ROOM SD
-  =====================================================================
-   Fitur:
-   - Monitoring suhu & kelembaban (sensor DHT22)
-   - Kontrol relay (ON/OFF) via aplikasi Blynk
-   - Kontrol relay manual via 2 push button (PB1=ON, PB2=OFF)
-   - Tampilan data suhu, kelembaban, status relay, & status WiFi di OLED
-   - Integrasi platform Blynk (Blynk IoT / Blynk 2.0)
-
-   Board   : ESP32-C3 Mini (Super Mini)
-   Sensor  : DHT22
-   Display : OLED SSD1306 128x64 (I2C)
-   Relay   : Modul relay 1 channel (aktif HIGH)
-  =====================================================================
-*/
-
-// ---------------------------------------------------------------------
-// 1. KREDENSIAL BLYNK
-//    Ambil dari Blynk.Console -> Template -> Device Info
-// ---------------------------------------------------------------------
-#define BLYNK_TEMPLATE_ID   "TMPLxxxxxxx"
-#define BLYNK_TEMPLATE_NAME "Smart Room"
-#define BLYNK_AUTH_TOKEN    "ISI_AUTH_TOKEN_ANDA"
+// Blynk Credentials
+#define BLYNK_TEMPLATE_ID "your_template_id"
+#define BLYNK_TEMPLATE_NAME "Smart Room SD"
+#define BLYNK_AUTH_TOKEN "your_auth_token"
 
 #include <WiFi.h>
+#include <WiFiClient.h>
 #include <BlynkSimpleEsp32.h>
-#include <DHT.h>
+#include "DHT.h"
 #include <Wire.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 
-// ---------------------------------------------------------------------
-// 2. KREDENSIAL WIFI
-// ---------------------------------------------------------------------
-char ssid[] = "NAMA_WIFI_ANDA";
-char pass[] = "PASSWORD_WIFI_ANDA";
+#define BLYNK_FIRMWARE_VERSION "0.1.0"
+#define BLYNK_PRINT Serial
+// #define BLYNK_DEBUG
+// #define APP_DEBUG
 
-// ---------------------------------------------------------------------
-// 3. KONFIGURASI PIN (ESP32-C3 Mini)
-//    Sesuaikan jika layout board Anda berbeda.
-// ---------------------------------------------------------------------
-#define DHTPIN     4      // Pin data DHT22
-#define DHTTYPE    DHT22
-#define RELAY_PIN  5      // Pin kontrol relay
-#define PB1_PIN    6      // Push button manual ON
-#define PB2_PIN    7      // Push button manual OFF
+// WiFi Credentials
+char ssid[] = "your_wifi_ssid";
+char pass[] = "your_wifi_password";
 
-#define OLED_SDA   8      // I2C SDA untuk OLED
-#define OLED_SCL   9      // I2C SCL untuk OLED
+// Pinout & Constants
+#define DHT_PIN 4
+#define RELAY_PIN 5
+#define DHTTYPE DHT22
+#define PB1_PIN 6
+#define PB2_PIN 7
+#define OLED_SDA 8
+#define OLED_SCL 9
+#define SEND_INTERVAL 5000L
 
-#define SCREEN_WIDTH   128
-#define SCREEN_HEIGHT  64
-#define OLED_RESET     -1
-#define SCREEN_ADDRESS 0x3C
+// Virtual Pin Blynk
+#define VPIN_TEMP V0 // Temperature
+#define VPIN_HUMIDITY V1 // Humidity
+#define VPIN_RELAY V2 // Relay Control
 
-// Set true jika relay module Anda aktif LOW (kebanyakan modul relay 1-channel murah aktif LOW)
-#define RELAY_ACTIVE_LOW false
+// Global Variables
+float temp, hum;
+int relayState = 0;
 
-// ---------------------------------------------------------------------
-// 4. VIRTUAL PIN BLYNK
-//    V0 = suhu (read only, value display)
-//    V1 = kelembaban (read only, value display)
-//    V2 = kontrol relay (switch/button)
-// ---------------------------------------------------------------------
-#define VPIN_TEMP   V0
-#define VPIN_HUMID  V1
-#define VPIN_RELAY  V2
-
-// ---------------------------------------------------------------------
-// Objek global
-// ---------------------------------------------------------------------
-DHT dht(DHTPIN, DHTTYPE);
-Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+// Class Declaration
 BlynkTimer timer;
+DHT dht(DHT_PIN, DHTTYPE);
+Adafruit_SSD1306 display(128, 64, &Wire, -1);
 
-bool  relayState  = false;
-float currentTemp  = NAN;
-float currentHumid = NAN;
+// Controlling Relay
+BLYNK_WRITE(VPIN_RELAY) {
+  relayState = param.asInt();
 
-const unsigned long BUTTON_DEBOUNCE_MS = 50;
-
-// ---------------------------------------------------------------------
-// Helper: set relay fisik sesuai state logis + jenis modul (active low/high)
-// ---------------------------------------------------------------------
-void setRelay(bool state) {
-  relayState = state;
-  bool pinLevel = RELAY_ACTIVE_LOW ? !state : state;
-  digitalWrite(RELAY_PIN, pinLevel ? HIGH : LOW);
-
-  if (Blynk.connected()) {
-    Blynk.virtualWrite(VPIN_RELAY, state ? 1 : 0);
+  if (relayState == 1) {
+    Serial.println("Relay ON via Blynk");
+    digitalWrite(RELAY_PIN, HIGH);
+    Serial.print("relayState = ");
+    Serial.println(relayState);
+  } else {
+    Serial.println("Relay OFF via Blynk");
+    digitalWrite(RELAY_PIN, LOW);
+    Serial.print("relayState = ");
+    Serial.println(relayState);
   }
+
+  // Update OLED
+  updateOLED();
 }
 
-// ---------------------------------------------------------------------
-// Tampilkan data terbaru ke OLED
-// ---------------------------------------------------------------------
+// Update OLED Display
 void updateOLED() {
   display.clearDisplay();
   display.setTextSize(1);
@@ -108,43 +76,36 @@ void updateOLED() {
 
   display.setCursor(0, 16);
   display.print("Suhu   : ");
-  if (isnan(currentTemp)) {
+  if (isnan(temp)) {
     display.println("-- C (error)");
   } else {
-    display.print(currentTemp, 1);
+    display.print(temp, 1);
     display.println(" C");
   }
 
   display.setCursor(0, 28);
   display.print("Lembab : ");
-  if (isnan(currentHumid)) {
+  if (isnan(hum)) {
     display.println("-- % (error)");
   } else {
-    display.print(currentHumid, 1);
+    display.print(hum, 1);
     display.println(" %");
   }
 
-  display.setCursor(0, 42);
+  display.setCursor(0, 40);
   display.print("Relay  : ");
   display.println(relayState ? "ON" : "OFF");
-
-  display.setCursor(0, 54);
-  display.print("WiFi   : ");
-  display.println(WiFi.status() == WL_CONNECTED ? "Terhubung" : "Terputus");
 
   display.display();
 }
 
-// ---------------------------------------------------------------------
-// Kontrol relay manual lewat 2 push button
-// ---------------------------------------------------------------------
 void handleManualButtons() {
   static bool lastPb1State = HIGH;
   static bool lastPb2State = HIGH;
   static unsigned long lastDebounceTime = 0;
 
   unsigned long now = millis();
-  if (now - lastDebounceTime < BUTTON_DEBOUNCE_MS) {
+  if (now - lastDebounceTime < 50) {
     return;
   }
   lastDebounceTime = now;
@@ -155,8 +116,14 @@ void handleManualButtons() {
   if (pb1State != lastPb1State) {
     lastPb1State = pb1State;
     if (pb1State == LOW) {
-      setRelay(true);
-      Serial.println("[MANUAL] Relay ON via PB1");
+      Serial.println("Relay ON via PB1");
+      digitalWrite(RELAY_PIN, HIGH);
+      relayState = 1;
+
+      // Sync with Blynk app
+      Blynk.virtualWrite(VPIN_RELAY, relayState);
+
+      // Update OLED
       updateOLED();
     }
   }
@@ -164,73 +131,55 @@ void handleManualButtons() {
   if (pb2State != lastPb2State) {
     lastPb2State = pb2State;
     if (pb2State == LOW) {
-      setRelay(false);
-      Serial.println("[MANUAL] Relay OFF via PB2");
+      Serial.println("Relay OFF via PB2");
+      digitalWrite(RELAY_PIN, LOW);
+      relayState = 0;
+      
+      // Sync with Blynk app
+      Blynk.virtualWrite(VPIN_RELAY, relayState);
+
+      // Update OLED
       updateOLED();
     }
   }
 }
 
-// ---------------------------------------------------------------------
-// Baca sensor DHT22 lalu kirim ke Blynk & OLED
-// ---------------------------------------------------------------------
-void readSensorAndSend() {
-  float h = dht.readHumidity();
-  float t = dht.readTemperature();
-
-  if (isnan(h) || isnan(t)) {
-    Serial.println("[DHT22] Gagal membaca sensor!");
-    currentTemp  = NAN;
-    currentHumid = NAN;
-    updateOLED();
+// Monitoring Temperature & Humidity
+void monitoring() {
+  // Read Sensor
+  temp = dht.readTemperature();
+  hum = dht.readHumidity();
+  if (isnan(hum) || isnan(temp)) {
+    Serial.println("Failed to read DHT sensor!");
     return;
   }
 
-  currentTemp  = t;
-  currentHumid = h;
+  // Debug
+  Serial.println("Temperature = " + String(temp) + " C");
+  Serial.println("Humidity = " + String(hum) + " %");
 
-  Serial.printf("[DHT22] Suhu: %.1f C | Kelembaban: %.1f %%\n", t, h);
+  // Send Data
+  Blynk.virtualWrite(VPIN_TEMP, temp);
+  Blynk.virtualWrite(VPIN_HUMIDITY, hum);
 
-  Blynk.virtualWrite(VPIN_TEMP, t);
-  Blynk.virtualWrite(VPIN_HUMID, h);
-
+  // Update OLED
   updateOLED();
 }
 
-// ---------------------------------------------------------------------
-// Dipanggil otomatis saat tombol/switch relay di app Blynk ditekan
-// ---------------------------------------------------------------------
-BLYNK_WRITE(VPIN_RELAY) {
-  int value = param.asInt(); // 0 atau 1
-  setRelay(value == 1);
-  Serial.printf("[RELAY] Diset ke %s dari Blynk\n", relayState ? "ON" : "OFF");
-  updateOLED();
-}
-
-// ---------------------------------------------------------------------
-// Sinkronisasi state setiap kali berhasil connect/reconnect ke Blynk
-// ---------------------------------------------------------------------
-BLYNK_CONNECTED() {
-  Blynk.syncVirtual(VPIN_RELAY);
-}
-
-// ---------------------------------------------------------------------
-// SETUP
-// ---------------------------------------------------------------------
 void setup() {
+  // Initialize serial communication
   Serial.begin(115200);
-  delay(300);
 
+  // Relay Setup
   pinMode(RELAY_PIN, OUTPUT);
-  pinMode(PB1_PIN, INPUT_PULLUP);
-  pinMode(PB2_PIN, INPUT_PULLUP);
-  setRelay(false); // pastikan relay OFF saat boot
 
+  // DHT Setup
   dht.begin();
 
+  // OLED Setup
   Wire.begin(OLED_SDA, OLED_SCL);
-  if (!display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS)) {
-    Serial.println("[OLED] Tidak terdeteksi, cek wiring I2C!");
+  if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
+    Serial.println("OLED tidak terdeteksi, cek wiring I2C!");
   }
   display.clearDisplay();
   display.setTextColor(SSD1306_WHITE);
@@ -238,19 +187,13 @@ void setup() {
   display.println("Menghubungkan WiFi...");
   display.display();
 
+  // Blynk Setup
   Blynk.begin(BLYNK_AUTH_TOKEN, ssid, pass);
-
-  // Baca & kirim data sensor setiap 2 detik
-  timer.setInterval(2000L, readSensorAndSend);
-
-  updateOLED();
+  timer.setInterval(SEND_INTERVAL, monitoring);
 }
 
-// ---------------------------------------------------------------------
-// LOOP
-// ---------------------------------------------------------------------
 void loop() {
-  handleManualButtons();
   Blynk.run();
   timer.run();
+  handleManualButtons();
 }
