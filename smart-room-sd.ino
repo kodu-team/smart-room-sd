@@ -17,15 +17,15 @@
 // #define APP_DEBUG
 
 // WiFi Credentials
-char ssid[] = "your_wifi_ssid";
-char pass[] = "your_wifi_password";
+char ssid[33] = "your_wifi_ssid";
+char pass[65] = "your_wifi_password";
 
 // Pinout & Constants
-#define DHT_PIN 4
-#define RELAY_PIN 5
+#define DHT_PIN 3
+#define RELAY_PIN 7
 #define DHTTYPE DHT22
-#define PB1_PIN 6
-#define PB2_PIN 7
+#define PB1_PIN 0
+#define PB2_PIN 1
 #define OLED_SDA 8
 #define OLED_SCL 9
 #define SEND_INTERVAL 5000L
@@ -38,6 +38,7 @@ char pass[] = "your_wifi_password";
 // Global Variables
 float temp, hum;
 int relayState = 0;
+bool relayActiveLow = true; // Relay active LOW
 
 // Class Declaration
 BlynkTimer timer;
@@ -50,12 +51,12 @@ BLYNK_WRITE(VPIN_RELAY) {
 
   if (relayState == 1) {
     Serial.println("Relay ON via Blynk");
-    digitalWrite(RELAY_PIN, HIGH);
+    digitalWrite(RELAY_PIN, relayActiveLow ? LOW : HIGH);
     Serial.print("relayState = ");
     Serial.println(relayState);
   } else {
     Serial.println("Relay OFF via Blynk");
-    digitalWrite(RELAY_PIN, LOW);
+    digitalWrite(RELAY_PIN, relayActiveLow ? HIGH : LOW);
     Serial.print("relayState = ");
     Serial.println(relayState);
   }
@@ -117,7 +118,7 @@ void handleManualButtons() {
     lastPb1State = pb1State;
     if (pb1State == LOW) {
       Serial.println("Relay ON via PB1");
-      digitalWrite(RELAY_PIN, HIGH);
+      digitalWrite(RELAY_PIN, relayActiveLow ? LOW : HIGH);
       relayState = 1;
 
       // Sync with Blynk app
@@ -132,7 +133,7 @@ void handleManualButtons() {
     lastPb2State = pb2State;
     if (pb2State == LOW) {
       Serial.println("Relay OFF via PB2");
-      digitalWrite(RELAY_PIN, LOW);
+      digitalWrite(RELAY_PIN, relayActiveLow ? HIGH : LOW);
       relayState = 0;
       
       // Sync with Blynk app
@@ -192,6 +193,9 @@ void setup() {
   display.display();
 
   // Blynk Setup
+  Serial.println("Connect to Blynk");
+  WiFi.begin(ssid, pass);
+  WiFi.setTxPower(WIFI_POWER_8_5dBm);
   Blynk.begin(BLYNK_AUTH_TOKEN, ssid, pass);
   timer.setInterval(SEND_INTERVAL, monitoring);
 
